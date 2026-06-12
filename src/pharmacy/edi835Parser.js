@@ -1,23 +1,5 @@
-/**
- * EDI 835 (Electronic Remittance Advice) parser.
- *
- * Insurance companies transmit payment/adjustment data in EDI 835 format.
- * This parser extracts claim-level transactions: amount paid, amount reversed,
- * insurance payer, and CARC/RARC reason codes.
- *
- * EDI 835 segments used:
- *   ISA - Interchange header (sender/receiver IDs)
- *   GS  - Functional group header
- *   ST  - Transaction set header
- *   BPR - Financial information (total payment amount)
- *   N1  - Name (payer / payee)
- *   CLP - Claim-level payment data
- *   CAS - Claim adjustment (reason codes + amounts)
- *   SVC - Service line detail
- */
-
-const SEGMENT_TERMINATOR = '~';
-const ELEMENT_SEPARATOR = '*';
+const SEGMENT_TERMINATOR  = '~';
+const ELEMENT_SEPARATOR   = '*';
 const SUBELEMENT_SEPARATOR = ':';
 
 function parseEDI835(rawText) {
@@ -30,39 +12,53 @@ function parseEDI835(rawText) {
 
   const transactions = [];
   let currentPayer = '';
-  let currentClaim = null;
+  let currentClaim  = null;
 
   for (const seg of segments) {
     const id = seg[0];
 
     if (id === 'N1' && seg[1] === 'PR') {
-      // Payer name
       currentPayer = seg[2] || '';
     }
 
     if (id === 'CLP') {
       if (currentClaim) transactions.push(currentClaim);
       currentClaim = {
-        claimId: seg[1] || '',
-        statusCode: seg[2] || '',    // 1=Processed as Primary, 4=Denied, etc.
-        chargedAmount: parseFloat(seg[3]) || 0,
-        paidAmount: parseFloat(seg[4]) || 0,
+        claimId:             seg[1] || '',
+        statusCode:          seg[2] || '',
+        claimStatus:         claimStatusLabel(seg[2] || ''),
+        chargedAmount:       parseFloat(seg[3]) || 0,
+        paidAmount:          parseFloat(seg[4]) || 0,
         patientResponsibility: parseFloat(seg[5]) || 0,
-        payer: currentPayer,
-        adjustments: [],
-        serviceLines: [],
+        payer:               currentPayer,
+        serviceDate:         null,
+        adjustments:         [],
+        serviceLines:        [],
       };
     }
 
+    // Claim-level service date
+    if (id === 'DTM' && currentClaim) {
+      const qualifier = seg[1];
+      if (qualifier === '232' || qualifier === '472') {
+        const raw = seg[2] || '';
+        if (raw.length === 8) {
+          currentClaim.serviceDate = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+        }
+      }
+    }
+
     if (id === 'CAS' && currentClaim) {
-      // Claim Adjustment Segment — may have up to 6 reason/amount pairs
-      const groupCode = seg[1]; // CO=Contractual, PR=Patient Responsibility, OA=Other
+      const groupCode = seg[1];
       let i = 2;
       while (i + 1 < seg.length && seg[i]) {
-        const reasonCode = seg[i];
-        const adjustedAmount = parseFloat(seg[i + 1]) || 0;
-        currentClaim.adjustments.push({ groupCode, reasonCode, adjustedAmount });
-        i += 3; // code, amount, quantity (optional)
+        currentClaim.adjustments.push({
+          groupCode,
+          groupLabel:     adjustmentGroupLabel(groupCode),
+          reasonCode:     seg[i],
+          adjustedAmount: parseFloat(seg[i + 1]) || 0,
+        });
+        i += 3;
       }
     }
 
@@ -73,7 +69,7 @@ function parseEDI835(rawText) {
         qualifier,
         procedureCode,
         chargedAmount: parseFloat(chargedAmt) || 0,
-        paidAmount: parseFloat(paidAmt) || 0,
+        paidAmount:    parseFloat(paidAmt) || 0,
       });
     }
   }
@@ -82,34 +78,24 @@ function parseEDI835(rawText) {
   return transactions;
 }
 
-/**
- * Flatten parsed transactions into spreadsheet-ready rows.
- * One row per adjustment reason code; reversal = negative paidAmount.
- */
 function flattenToRows(transactions) {
   const rows = [];
   for (const claim of transactions) {
     const isReversal = claim.paidAmount < 0;
-    const baseRow = {
-      ClaimID: claim.claimId,
-      Payer: claim.payer,
-      ClaimStatus: claimStatusLabel(claim.statusCode),
-      ChargedAmount: claim.chargedAmount,
-      PaidAmount: claim.paidAmount,
-      Type: isReversal ? 'Reversal' : 'Payment',
+    const base = {
+      ClaimID:               claim.claimId,
+      Payer:                 claim.payer,
+      ClaimStatus:           claim.claimStatus,
+      Type:                  isReversal ? 'Reversal' : 'Payment',
+      ChargedAmount:         claim.chargedAmount,
+      PaidAmount:            claim.paidAmount,
       PatientResponsibility: claim.patientResponsibility,
     };
-
     if (claim.adjustments.length === 0) {
-      rows.push({ ...baseRow, AdjustmentGroup: '', ReasonCode: '', AdjustedAmount: 0 });
+      rows.push({ ...base, AdjustmentGroup: '', ReasonCode: '', AdjustedAmount: 0 });
     } else {
       for (const adj of claim.adjustments) {
-        rows.push({
-          ...baseRow,
-          AdjustmentGroup: adjustmentGroupLabel(adj.groupCode),
-          ReasonCode: adj.reasonCode,
-          AdjustedAmount: adj.adjustedAmount,
-        });
+        rows.push({ ...base, AdjustmentGroup: adj.groupLabel, ReasonCode: adj.reasonCode, AdjustedAmount: adj.adjustedAmount });
       }
     }
   }
@@ -118,12 +104,8 @@ function flattenToRows(transactions) {
 
 function claimStatusLabel(code) {
   const map = {
-    '1': 'Processed - Primary',
-    '2': 'Processed - Secondary',
-    '3': 'Processed - Tertiary',
-    '4': 'Denied',
-    '19': 'Processed - Primary, Forwarded',
-    '20': 'Processed - Secondary, Forwarded',
+    '1': 'Processed - Primary', '2': 'Processed - Secondary', '3': 'Processed - Tertiary',
+    '4': 'Denied', '19': 'Processed - Primary, Forwarded', '20': 'Processed - Secondary, Forwarded',
     '22': 'Reversal',
   };
   return map[code] || code;
@@ -131,13 +113,10 @@ function claimStatusLabel(code) {
 
 function adjustmentGroupLabel(code) {
   const map = {
-    CO: 'Contractual Obligation',
-    PR: 'Patient Responsibility',
-    OA: 'Other Adjustment',
-    PI: 'Payer Initiated',
-    CR: 'Correction / Reversal',
+    CO: 'Contractual Obligation', PR: 'Patient Responsibility',
+    OA: 'Other Adjustment', PI: 'Payer Initiated', CR: 'Correction / Reversal',
   };
   return map[code] || code;
 }
 
-module.exports = { parseEDI835, flattenToRows };
+module.exports = { parseEDI835, flattenToRows, claimStatusLabel, adjustmentGroupLabel };

@@ -1,19 +1,80 @@
 {
-  "name": "dong-app",
+  "name": "pharmacy-accounting",
   "version": "1.0.0",
-  "description": "Node.js backend with PostgreSQL and Redis",
-  "main": "src/index.js",
+  "description": "Pharmacy Insurance Remittance Accounting Dashboard",
+  "main": "main.js",
   "scripts": {
-    "start": "node src/index.js"
-  },
-  "engines": {
-    "node": ">=22"
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build": "electron-builder",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "multer": "^2.1.1",
-    "pg": "^8.12.0",
-    "redis": "^4.7.0",
+    "better-sqlite3": "^9.6.0",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9"
+  },
+  "build": {
+    "appId": "com.pharmacy.accounting",
+    "productName": "Pharmacy Accounting",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "src/**",
+      "node_modules/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }
