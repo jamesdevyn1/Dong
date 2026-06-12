@@ -1,6 +1,7 @@
-# Stage 1: install production dependencies
+# Stage 1: install production dependencies (build tools needed for better-sqlite3)
 FROM node:22-alpine AS deps
 WORKDIR /app
+RUN apk add --no-cache python3 make g++
 COPY package.json ./
 RUN npm install --omit=dev
 

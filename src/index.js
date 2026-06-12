@@ -1,18 +1,14 @@
 const express = require('express');
 const { Pool } = require('pg');
-const { createClient } = require('redis');
+const Database = require('better-sqlite3');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const redisClient = createClient({ url: process.env.REDIS_URL });
-redisClient.on('error', (err) => console.error('Redis error:', err));
-
-(async () => {
-  await redisClient.connect();
-})();
+const sqlite = new Database(process.env.SQLITE_PATH || '/app/data/app.db');
+sqlite.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)');
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -27,10 +23,11 @@ app.get('/db-check', async (_req, res) => {
   }
 });
 
-app.get('/redis-check', async (_req, res) => {
+app.get('/sqlite-check', (_req, res) => {
   try {
-    const pong = await redisClient.ping();
-    res.json({ status: 'ok', response: pong });
+    sqlite.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('ping', 'pong')").run();
+    const row = sqlite.prepare("SELECT value FROM kv WHERE key = 'ping'").get();
+    res.json({ status: 'ok', response: row.value });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
