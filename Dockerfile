@@ -10,5 +10,5 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 USER node
-EXPOSE 3000
+EXPOSE 3000 3001
 CMD ["node", "src/index.js"]

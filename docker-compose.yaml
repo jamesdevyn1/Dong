@@ -13,6 +13,17 @@ services:
       - app-network
     restart: unless-stopped
 
+  bank:
+    build: .
+    command: ["node", "src/bank.js"]
+    ports:
+      - "3001:3001"
+    environment:
+      - BANK_PORT=3001
+    networks:
+      - app-network
+    restart: unless-stopped
+
   db:
     image: postgres:17-alpine
     env_file: .env

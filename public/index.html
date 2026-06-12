@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bank Transaction Categorizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface);
+    }
+
+    .logo { font-size: 1.5rem; }
+    header h1 { font-size: 1.25rem; font-weight: 700; }
+    header p { color: var(--muted); font-size: 0.875rem; }
+
+    main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+    /* ── Upload zone ── */
+    #upload-section {
+      margin-bottom: 2rem;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--surface);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.06);
+    }
+    .drop-zone .icon { font-size: 3rem; margin-bottom: 0.75rem; display: block; }
+    .drop-zone h2 { font-size: 1.125rem; margin-bottom: 0.5rem; }
+    .drop-zone p { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.25rem; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      border: none;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost { background: var(--surface2); color: var(--text); }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+
+    #file-input { display: none; }
+
+    .sample-note { margin-top: 0.75rem; color: var(--muted); font-size: 0.8rem; }
+    .sample-note button { background: none; border: none; color: var(--accent2); cursor: pointer; font-size: 0.8rem; text-decoration: underline; }
+
+    /* ── Stats bar ── */
+    #stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; }
+    .stat-card .value.pos { color: var(--green); }
+    .stat-card .value.neg { color: var(--red); }
+
+    /* ── Charts ── */
+    #charts-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 900px) { #charts-section { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 1.5rem;
+    }
+    .chart-card h3 { font-size: 0.9rem; color: var(--muted); margin-bottom: 1.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .chart-wrap { position: relative; height: 280px; }
+
+    /* ── Transactions table ── */
+    #transactions-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .table-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .table-header h3 { font-size: 1rem; font-weight: 600; }
+
+    .controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+    input[type="text"], select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0.4rem 0.75rem;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    input[type="text"]:focus, select:focus { border-color: var(--accent); }
+    input[type="text"] { width: 200px; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 0.7rem 1rem;
+      border-bottom: 1px solid rgba(51,65,85,0.5);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(99,102,241,0.04); }
+
+    .amount-pos { color: var(--green); font-weight: 600; }
+    .amount-neg { color: var(--red); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    .cat-select {
+      background: var(--surface2);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .cat-select:focus { border-color: var(--accent); outline: none; }
+
+    .date-col { color: var(--muted); white-space: nowrap; }
+    .desc-col { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .page-btns { display: flex; gap: 0.5rem; }
+
+    /* hidden sections */
+    #results { display: none; }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .spinner {
+      display: inline-block;
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 0.75rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">💳</span>
+  <div>
+    <h1>Bank Transaction Categorizer</h1>
+    <p>Upload a CSV export and visualize where your money goes</p>
+  </div>
+</header>
+
+<main>
+  <!-- Upload -->
+  <section id="upload-section">
+    <div class="drop-zone" id="drop-zone">
+      <span class="icon">📂</span>
+      <h2>Drop your bank CSV here</h2>
+      <p>Supports Chase, Bank of America, Wells Fargo, and most standard bank exports</p>
+      <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+        Choose File
+      </button>
+      <input type="file" id="file-input" accept=".csv" />
+      <p class="sample-note">No file? <button onclick="loadSample()">Load sample data</button></p>
+    </div>
+    <div id="error-area"></div>
+  </section>
+
+  <!-- Results (hidden until data loaded) -->
+  <div id="results">
+    <div id="stats-bar">
+      <div class="stat-card">
+        <div class="label">Total Transactions</div>
+        <div class="value" id="stat-count">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Income</div>
+        <div class="value pos" id="stat-income">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Spending</div>
+        <div class="value neg" id="stat-spending">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Net Cash Flow</div>
+        <div class="value" id="stat-net">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Top Category</div>
+        <div class="value" id="stat-top" style="font-size:1.1rem">—</div>
+      </div>
+    </div>
+
+    <section id="charts-section">
+      <div class="chart-card">
+        <h3>Spending by Category</h3>
+        <div class="chart-wrap"><canvas id="donut-chart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Monthly Spending</h3>
+        <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
+      </div>
+    </section>
+
+    <section id="transactions-section">
+      <div class="table-header">
+        <h3>Transactions <span id="tx-count-label" style="color:var(--muted);font-weight:400;font-size:0.85rem"></span></h3>
+        <div class="controls">
+          <input type="text" id="search-input" placeholder="Search description…" oninput="filterTable()" />
+          <select id="cat-filter" onchange="filterTable()">
+            <option value="">All categories</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="resetUpload()">↑ Upload new file</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Category</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="tx-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span id="page-info"></span>
+        <div class="page-btns">
+          <button class="btn btn-ghost btn-sm" id="btn-prev" onclick="changePage(-1)">← Prev</button>
+          <button class="btn btn-ghost btn-sm" id="btn-next" onclick="changePage(1)">Next →</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let allTransactions = [];
+let filteredTransactions = [];
+let categoryMeta = {};
+let donutChart = null;
+let barChart = null;
+
+const PAGE_SIZE = 25;
+let currentPage = 0;
+
+// ── Category metadata ────────────────────────────────────────────────────────
+async function loadCategories() {
+  const res = await fetch('/api/categories');
+  const list = await res.json();
+  list.forEach(({ category, color }) => { categoryMeta[category] = color; });
+}
+loadCategories();
+
+// ── Upload / drag-drop ───────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); });
+
+async function uploadFile(file) {
+  showError('');
+  const fd = new FormData();
+  fd.append('file', file);
+
+  dropZone.innerHTML = `<div class="loading"><div class="spinner"></div><p>Parsing and categorizing…</p></div>`;
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    renderResults(data.transactions);
+  } catch (err) {
+    resetDropZone();
+    showError(err.message);
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-area');
+  el.innerHTML = msg ? `<div class="error-msg">⚠️ ${msg}</div>` : '';
+}
+
+// ── Sample data ──────────────────────────────────────────────────────────────
+function loadSample() {
+  const csv = `Date,Description,Amount
+2024-01-03,Starbucks Coffee,-5.75
+2024-01-04,PAYROLL DIRECT DEP,3250.00
+2024-01-05,Whole Foods Market,-87.43
+2024-01-06,Netflix,-15.99
+2024-01-07,Shell Gas Station,-62.10
+2024-01-08,Amazon.com,-34.99
+2024-01-09,Chipotle Mexican Grill,-13.45
+2024-01-10,Spotify Premium,-9.99
+2024-01-11,CVS Pharmacy,-28.60
+2024-01-12,Uber,-14.25
+2024-01-14,Trader Joe's,-72.18
+2024-01-15,AT&T Wireless,-85.00
+2024-01-17,Dominos Pizza,-24.87
+2024-01-18,PAYROLL DIRECT DEP,3250.00
+2024-01-19,Target,-56.32
+2024-01-20,Delta Airlines,-342.00
+2024-01-21,Marriott Hotels,-189.00
+2024-01-22,Walgreens,-18.44
+2024-01-23,McDonald's,-9.15
+2024-01-24,Home Depot,-94.67
+2024-01-25,Disney+ Subscription,-13.99
+2024-01-26,Lyft,-11.50
+2024-01-28,Panera Bread,-16.75
+2024-01-29,Costco Wholesale,-134.22
+2024-01-30,Comcast Xfinity,-79.99
+2024-01-31,Interest Paid,4.12
+2024-02-01,Kroger Grocery,-93.41
+2024-02-02,PAYROLL DIRECT DEP,3250.00
+2024-02-03,Best Buy,-249.99
+2024-02-04,Uber Eats,-31.20
+2024-02-05,Verizon Wireless,-92.00
+2024-02-06,Airbnb,-215.00
+2024-02-07,Chewy.com,-67.88
+2024-02-08,AMC Theatres,-28.50
+2024-02-09,Shell Gas Station,-58.90
+2024-02-10,Starbucks Coffee,-6.25
+2024-02-12,H&M Clothing,-45.00
+2024-02-13,Hulu,-7.99
+2024-02-14,Whole Foods Market,-104.55
+2024-02-15,PAYROLL DIRECT DEP,3250.00
+2024-02-16,Olive Garden,-52.30
+2024-02-17,Amazon.com,-89.00
+2024-02-18,CVS Pharmacy,-22.10
+2024-02-19,Lyft,-9.75
+2024-02-20,T-Mobile,-65.00
+2024-02-21,United Airlines,-410.00
+2024-02-22,Target,-72.44
+2024-02-23,Dunkin Donuts,-4.85
+2024-02-24,Netflix,-15.99
+2024-02-25,Trader Joe's,-68.77
+2024-02-28,Home Depot,-47.30`;
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const file = new File([blob], 'sample_transactions.csv', { type: 'text/csv' });
+  uploadFile(file);
+}
+
+// ── Render results ───────────────────────────────────────────────────────────
+function renderResults(transactions) {
+  allTransactions = transactions;
+  filteredTransactions = [...transactions];
+  currentPage = 0;
+
+  resetDropZone();
+  document.getElementById('results').style.display = 'block';
+
+  updateStats();
+  renderCharts();
+  populateCatFilter();
+  renderTable();
+}
+
+function resetDropZone() {
+  dropZone.innerHTML = `
+    <span class="icon">📂</span>
+    <h2>Drop your bank CSV here</h2>
+    <p>Supports Chase, Bank of America, Wells Fargo, and most standard bank exports</p>
+    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Choose File</button>
+    <input type="file" id="file-input" accept=".csv" />
+    <p class="sample-note">No file? <button onclick="loadSample()">Load sample data</button></p>`;
+  document.getElementById('file-input').addEventListener('change', () => {
+    const f = document.getElementById('file-input').files[0];
+    if (f) uploadFile(f);
+  });
+}
+
+function resetUpload() {
+  document.getElementById('results').style.display = 'none';
+  resetDropZone();
+  if (donutChart) { donutChart.destroy(); donutChart = null; }
+  if (barChart) { barChart.destroy(); barChart = null; }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function fmt(n) {
+  return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function updateStats() {
+  const expenses = allTransactions.filter(t => t.amount < 0 && t.category !== 'Income');
+  const income = allTransactions.filter(t => t.amount > 0 || t.category === 'Income');
+  const totalSpending = expenses.reduce((s, t) => s + Math.abs(t.amount), 0);
+  const totalIncome = income.reduce((s, t) => s + Math.abs(t.amount), 0);
+  const net = totalIncome - totalSpending;
+
+  document.getElementById('stat-count').textContent = allTransactions.length;
+  document.getElementById('stat-income').textContent = fmt(totalIncome);
+  document.getElementById('stat-spending').textContent = fmt(totalSpending);
+
+  const netEl = document.getElementById('stat-net');
+  netEl.textContent = (net >= 0 ? '+' : '-') + fmt(net);
+  netEl.className = 'value ' + (net >= 0 ? 'pos' : 'neg');
+
+  // Top spending category
+  const byCategory = {};
+  expenses.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + Math.abs(t.amount); });
+  const topCat = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+  document.getElementById('stat-top').textContent = topCat ? `${topCat[0]}` : '—';
+}
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+function getCategoryTotals() {
+  const map = {};
+  allTransactions.filter(t => t.amount < 0 && t.category !== 'Income').forEach(t => {
+    map[t.category] = (map[t.category] || 0) + Math.abs(t.amount);
+  });
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+
+function getMonthlyTotals() {
+  const map = {};
+  allTransactions.filter(t => t.amount < 0 && t.category !== 'Income').forEach(t => {
+    const month = t.date ? t.date.substring(0, 7) : 'Unknown';
+    map[month] = (map[month] || 0) + Math.abs(t.amount);
+  });
+  return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+const CHART_DEFAULTS = {
+  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+};
+
+function renderCharts() {
+  const catData = getCategoryTotals();
+  const monthData = getMonthlyTotals();
+
+  // Donut
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById('donut-chart'), {
+    type: 'doughnut',
+    data: {
+      labels: catData.map(([cat]) => cat),
+      datasets: [{
+        data: catData.map(([, v]) => v.toFixed(2)),
+        backgroundColor: catData.map(([cat]) => categoryMeta[cat] || '#9ca3af'),
+        borderWidth: 2,
+        borderColor: '#1e293b',
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#94a3b8', font: { size: 11 }, padding: 12, boxWidth: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.label}: $${parseFloat(ctx.raw).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          },
+        },
+      },
+    },
+  });
+
+  // Bar
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart'), {
+    type: 'bar',
+    data: {
+      labels: monthData.map(([m]) => {
+        try { return new Date(m + '-02').toLocaleString('default', { month: 'short', year: 'numeric' }); } catch { return m; }
+      }),
+      datasets: [{
+        label: 'Spending',
+        data: monthData.map(([, v]) => v.toFixed(2)),
+        backgroundColor: '#6366f1',
+        borderRadius: 6,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` $${parseFloat(ctx.raw).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,0.5)' } },
+        y: {
+          ticks: { color: '#94a3b8', callback: (v) => '$' + v.toLocaleString() },
+          grid: { color: 'rgba(51,65,85,0.5)' },
+        },
+      },
+    },
+  });
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function populateCatFilter() {
+  const cats = [...new Set(allTransactions.map(t => t.category))].sort();
+  const sel = document.getElementById('cat-filter');
+  sel.innerHTML = '<option value="">All categories</option>';
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function filterTable() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const cat = document.getElementById('cat-filter').value;
+  filteredTransactions = allTransactions.filter(t => {
+    const matchSearch = !search || t.description.toLowerCase().includes(search) || t.date.toLowerCase().includes(search);
+    const matchCat = !cat || t.category === cat;
+    return matchSearch && matchCat;
+  });
+  currentPage = 0;
+  renderTable();
+}
+
+function renderTable() {
+  const start = currentPage * PAGE_SIZE;
+  const page = filteredTransactions.slice(start, start + PAGE_SIZE);
+  const tbody = document.getElementById('tx-body');
+
+  tbody.innerHTML = page.map(t => {
+    const color = categoryMeta[t.category] || '#9ca3af';
+    const amtCls = t.amount >= 0 ? 'amount-pos' : 'amount-neg';
+    const amtStr = (t.amount >= 0 ? '+' : '') + '$' + Math.abs(t.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const catOptions = Object.keys(categoryMeta).map(c =>
+      `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
+    ).join('');
+
+    return `<tr>
+      <td class="date-col">${t.date || '—'}</td>
+      <td class="desc-col" title="${escHtml(t.description)}">${escHtml(t.description)}</td>
+      <td>
+        <select class="cat-select" data-id="${t.id}" onchange="updateCategory(this)">
+          ${catOptions}
+        </select>
+      </td>
+      <td style="text-align:right" class="${amtCls}">${amtStr}</td>
+    </tr>`;
+  }).join('');
+
+  const total = filteredTransactions.length;
+  const end = Math.min(start + PAGE_SIZE, total);
+  document.getElementById('page-info').textContent = total ? `${start + 1}–${end} of ${total}` : '0 results';
+  document.getElementById('tx-count-label').textContent = `(${total})`;
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = end >= total;
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable();
+  document.getElementById('transactions-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateCategory(sel) {
+  const id = parseInt(sel.dataset.id);
+  const cat = sel.value;
+  const tx = allTransactions.find(t => t.id === id);
+  if (tx) {
+    tx.category = cat;
+    filteredTransactions = filteredTransactions.map(t => t.id === id ? { ...t, category: cat } : t);
+    updateStats();
+    renderCharts();
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
