@@ -1,9 +1,12 @@
 const express = require('express');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
+const pharmacyRoutes = require('./pharmacy/routes');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use('/pharmacy', pharmacyRoutes);
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
