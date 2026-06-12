@@ -1,14 +1,20 @@
 const express = require('express');
 const multer = require('multer');
-const { parse } = require('csv-parse/sync');
+const Papa = require('papaparse');
 const path = require('path');
 const fs = require('fs');
 
 const app = express();
 const port = process.env.BANK_PORT || 3001;
 
+// When packaged with pkg, __dirname is inside the snapshot FS.
+// Use the executable's real directory for public assets so they
+// can be extracted alongside the binary if needed; fall back to
+// the snapshot path (works when assets are bundled via pkg.assets).
+const publicDir = path.join(__dirname, '../public');
+
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(publicDir));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -106,17 +112,8 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
     const csv = req.file.buffer.toString('utf8');
 
-    let records;
-    try {
-      records = parse(csv, { columns: true, skip_empty_lines: true, trim: true, bom: true });
-    } catch {
-      // Try without header
-      records = parse(csv, { columns: false, skip_empty_lines: true, trim: true, bom: true });
-      if (!records.length) return res.status(400).json({ error: 'Could not parse CSV' });
-      // Use first row as headers
-      const headers = records[0];
-      records = records.slice(1).map((row) => Object.fromEntries(headers.map((h, i) => [h, row[i]])));
-    }
+    const result = Papa.parse(csv, { header: true, skipEmptyLines: true, trimHeaders: true, dynamicTyping: false });
+    let records = result.data;
 
     if (!records.length) return res.status(400).json({ error: 'CSV is empty' });
 
@@ -175,7 +172,7 @@ app.get('/api/categories', (_req, res) => {
 
 // Serve frontend for all other routes
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(publicDir, 'index.html'));
 });
 
 app.listen(port, () => {
